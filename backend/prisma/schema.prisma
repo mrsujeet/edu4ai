@@ -1,0 +1,179 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Chat sessions
+  sessions ChatSession[]
+  
+  // User preferences
+  preferences UserPreferences?
+
+  @@map("users")
+}
+
+model UserPreferences {
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  preferredModel  String? @default("gpt-4")
+  theme          String? @default("light")
+  language       String? @default("en")
+  safetyLevel    Int     @default(80) // Safety score threshold (0-100)
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  userId    String?
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Session metadata
+  metadata Json?
+  
+  // Relationships
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  @@map("chat_sessions")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  sessionId String
+  role      Role
+  content   String
+  createdAt DateTime @default(now())
+  
+  // AI metadata
+  provider     String?
+  model        String?
+  tokens       Int?
+  safetyScore  Float?
+  processingTime Int? // milliseconds
+  
+  // Content metadata
+  metadata Json?
+  
+  // Relationships
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model SafetyLog {
+  id          String   @id @default(cuid())
+  messageId   String?
+  content     String
+  safetyScore Float
+  flags       String[] // Array of safety flags
+  action      String   // blocked, warned, allowed
+  createdAt   DateTime @default(now())
+  
+  // Additional context
+  userAgent   String?
+  ipAddress   String?
+  metadata    Json?
+
+  @@map("safety_logs")
+}
+
+model ProviderStatus {
+  id           String   @id @default(cuid())
+  provider     String   @unique
+  isAvailable  Boolean  @default(true)
+  lastChecked  DateTime @default(now())
+  responseTime Int?     // milliseconds
+  errorCount   Int      @default(0)
+  
+  // Provider metadata
+  models       String[]
+  rateLimits   Json?
+  metadata     Json?
+
+  @@map("provider_status")
+}
+
+model Analytics {
+  id              String   @id @default(cuid())
+  date            DateTime @default(now())
+  
+  // Usage statistics
+  totalRequests   Int      @default(0)
+  successfulRequests Int   @default(0)
+  failedRequests  Int      @default(0)
+  
+  // Safety statistics
+  blockedRequests Int      @default(0)
+  averageSafetyScore Float?
+  
+  // Performance
+  averageResponseTime Float?
+  
+  // Provider statistics
+  providerUsage   Json?
+  
+  @@unique([date])
+  @@map("analytics")
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  name      String
+  key       String   @unique
+  userId    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  
+  // Usage tracking
+  usageCount Int @default(0)
+  lastUsed   DateTime?
+  
+  // Permissions
+  permissions Json?
+
+  @@map("api_keys")
+}
+
+enum Role {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+// Indexes for performance
+model ChatSession {
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Message {
+  @@index([sessionId])
+  @@index([createdAt])
+  @@index([role])
+}
+
+model SafetyLog {
+  @@index([createdAt])
+  @@index([safetyScore])
+  @@index([action])
+}
